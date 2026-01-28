@@ -5,25 +5,12 @@
   <title>新北 YouBike 2.0｜中和區即時站點地圖</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- 加速外部資源連線（可選） -->
-  https://unpkg.com
-  https://{s}.tile.openstreetmap.org
+  <!-- 預連線（可選，加速外部資源握手） -->
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://a.tile.openstreetmap.org">
+  <link rel="preconnect" href="https://b.tile.openstreetmap.org">
 
-  <!-- Leaflet（地圖套件） -->
-  <!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="UTF-8" />
-  <title>新北 YouBike 2.0｜中和區即時站點地圖</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- 加速外部資源連線（可選） -->
-  <link rel="preconnect" href="https://unpkg.com" />
-  <!-- OSM tile 有 a/b/c 三個子網域，挑一兩個預連線即可 -->
-  <link rel="preconnect" href="https://a.tile.openstreetmap.org" />
-  <link rel="preconnect" href="https://b.tile.openstreetmap.org" />
-
-  <!-- Leaflet（地圖套件） -->
+  <!-- Leaflet CSS（一定要是 <link>） -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -34,76 +21,47 @@
   <style>
     :root{
       /* 官方風格（近似）：YouBike 2.0 芥末黃／象牙白；2.0E 橘 */
-      --yb-yellow: #F2A118; /* 芥末黃（近似） */
-      --yb-white:  #FFF8E7; /* 象牙白（近似） */
-      --yb-orange: #FF7A00; /* 2.0E 橘（近似） */
-
+      --yb-yellow:#F2A118; --yb-white:#FFF8E7; --yb-orange:#FF7A00;
       /* 狀態色語意與官方圖例一致：綠=正常、黃=無車、紅=滿位 */
-      --status-green:  #2DBE60;
-      --status-yellow: #F2A31B;
-      --status-red:    #E64545;
-
+      --status-green:#2DBE60; --status-yellow:#F2A31B; --status-red:#E64545;
       /* 介面基礎色 */
-      --bg: #050b1e;
-      --panel: rgba(255,255,255,0.06);
-      --panel-border: rgba(255,255,255,0.15);
-      --text: #fff;
-      --muted: rgba(255,255,255,.7);
+      --bg:#050b1e; --panel:rgba(255,255,255,.06); --panel-bd:rgba(255,255,255,.15);
+      --text:#fff; --muted:rgba(255,255,255,.7);
     }
-
     /* 頁首：黃白感 */
     header{
       padding:16px 20px;
       background:
-        linear-gradient(180deg, rgba(242,161,24,0.35), rgba(242,161,24,0) 60%),
+        linear-gradient(180deg, rgba(242,161,24,.35), rgba(242,161,24,0) 60%),
         radial-gradient(1200px 300px at 20% -50%, #1b2a4a, var(--bg));
     }
-
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
     h1{margin:0 0 10px;font-size:20px}
 
     .toolbar{
-      display:grid;
-      grid-template-columns:1.4fr 1fr 1fr 1fr auto;
-      gap:10px;
-      align-items:center;
+      display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr 1fr auto; gap:10px; align-items:center;
     }
     .toolbar input,.toolbar select,.toolbar button,.toolbar label{
-      background:var(--panel);
-      color:var(--text);
-      border:1px solid var(--panel-border);
-      border-radius:12px;
-      padding:10px 12px;
-      font-size:14px;
+      background:var(--panel); color:var(--text); border:1px solid var(--panel-bd);
+      border-radius:12px; padding:10px 12px; font-size:14px;
     }
     .toolbar input::placeholder{color:rgba(255,255,255,.6)}
     .toolbar button{
-      background:linear-gradient(180deg, #FFE08A, var(--yb-yellow));
-      color:#000;border:none;font-weight:700;cursor:pointer;
-      transition: filter .15s ease, box-shadow .15s ease;
+      background:linear-gradient(180deg,#FFE08A,var(--yb-yellow));
+      color:#000; border:none; font-weight:700; cursor:pointer;
+      transition:filter .15s ease, box-shadow .15s ease;
     }
-    .toolbar button:hover{
-      filter: brightness(1.03);
-      box-shadow: 0 2px 8px rgba(0,0,0,.25);
-    }
+    .toolbar button:hover{ filter:brightness(1.03); box-shadow:0 2px 8px rgba(0,0,0,.25); }
 
     .meta{margin-top:8px;color:var(--muted);font-size:13px;display:flex;gap:16px;align-items:center}
 
     /* 提示條（資料空或載入失敗時出現） */
-    #hint{
-      display:none;
-      margin:8px 20px 0;
-      padding:8px 12px;
-      font-size:13px;
-      color:#000;
-      background: #FFE08A;
-      border-left: 4px solid var(--yb-yellow);
-      border-radius:8px;
-    }
+    #hint{ display:none; margin:8px 20px 0; padding:8px 12px; font-size:13px; color:#000;
+      background:#FFE08A; border-left:4px solid var(--yb-yellow); border-radius:8px; }
 
     /* 地圖高度（行動端保底） */
-    #map{height:calc(100vh - 180px);min-height:60vh;width:100%}
+    #map{height:calc(100vh - 200px); min-height:60vh; width:100%}
 
     /* 自訂圓形雙數字 marker（上=可借、下=可還） */
     .leaflet-div-icon{background:transparent;border:none}
@@ -113,11 +71,7 @@
     .marker.red   { --fill: var(--status-red);   --stroke:#8F1F1F }
 
     /* 見車率 >= 90% 的高亮外圈（YouBike 芥末黃） */
-    .marker.highlight svg circle.outer-ring{
-      stroke: var(--yb-yellow);
-      stroke-width: 6;
-      fill: none;
-    }
+    .marker.highlight svg circle.outer-ring{ stroke:var(--yb-yellow); stroke-width:6; fill:none; }
 
     /* popup 標題與地址換行 */
     .leaflet-popup-content b{ color: var(--yb-yellow); }
@@ -126,17 +80,14 @@
     /* 右下角圖例 */
     .legend{
       position:absolute;right:12px;bottom:12px;
-      background:var(--panel);border:1px solid var(--panel-border);
+      background:var(--panel);border:1px solid var(--panel-bd);
       border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.6
     }
     .legend .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
     .dot.green {background:var(--status-green)}
     .dot.yellow{background:var(--status-yellow)}
     .dot.red   {background:var(--status-red)}
-    .legend .ring{
-      display:inline-block;width:10px;height:10px;border-radius:50%;
-      border:3px solid var(--yb-yellow);margin-right:6px;vertical-align:middle
-    }
+    .legend .ring{display:inline-block;width:10px;height:10px;border-radius:50%;border:3px solid var(--yb-yellow);margin-right:6px;vertical-align:middle}
   </style>
 </head>
 <body>
@@ -150,15 +101,17 @@
         <option value="yellow">無車</option>
         <option value="red">滿位</option>
       </select>
+      <!-- 新增：見車率篩選 -->
+      <select id="rateFilter" title="見車率篩選">
+        <option value="all" selected>見車率：全部</option>
+        <option value="ge90">≥ 90%</option>
+        <option value="lt90">&lt; 90%</option>
+      </select>
       <select id="interval">
         <option value="30" selected>每 30 秒更新</option>
         <option value="60">每 60 秒更新</option>
         <option value="0">停止自動更新</option>
       </select>
-      <label style="display:flex;gap:8px;align-items:center;">
-        <input id="only90" type="checkbox" checked />
-        只看見車率 ≥ 90%
-      </label>
       <button id="refresh">立即更新</button>
     </div>
     <div class="meta">
@@ -178,7 +131,7 @@
     <div style="margin-top:6px"><span class="ring"></span>見車率 ≥ 90%（可借 ÷ 總格）</div>
   </div>
 
-  <!-- ✅ 正確的 Leaflet JS 載入（一定要是 <script src="..."></script>） -->
+  <!-- ✅ 正確的 Leaflet JS 載入（一定要是 <script src=...></script>） -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -216,11 +169,9 @@
       return s.total > 0 ? (s.borrow / s.total) : 0; // 見車率（可借/總格）
     }
 
-    // ===== Render =====
-    function clearMarkers(){
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
-    }
+    // ===== 渲染 =====
+    function clearMarkers(){ markers.forEach(m => map.removeLayer(m)); markers = []; }
+
     function markerHTML(s){
       const st = statusOf(s);
       const hi = availRate(s) >= 0.9; // 見車率門檻
@@ -235,16 +186,21 @@
           </svg>
         </div>`;
     }
+
     function render(){
       clearMarkers();
 
-      const kw     = document.getElementById("kw").value.trim();
-      const stF    = document.getElementById("status").value;
-      const only90 = document.getElementById("only90").checked;
+      const kw      = document.getElementById("kw").value.trim();
+      const stF     = document.getElementById("status").value;
+      const rateF   = document.getElementById("rateFilter").value;
 
       const list = stations.filter(s => {
         if (stF !== "all" && statusOf(s) !== stF) return false;
-        if (only90 && !(availRate(s) >= 0.9))    return false;
+
+        const rate = availRate(s);
+        if (rateF === "ge90" && !(rate >= 0.9)) return false;
+        if (rateF === "lt90" && !(rate <  0.9)) return false;
+
         if (kw && !s.name.includes(kw) && !s.addr.includes(kw)) return false;
         return true;
       });
@@ -252,88 +208,3 @@
       list.forEach(s => {
         const m = L.marker([s.lat, s.lng], {
           icon: L.divIcon({
-            iconSize: [56,56],
-            iconAnchor: [28,28],
-            html: markerHTML(s)
-          })
-        }).addTo(map).bindPopup(`
-          <b>${s.name}</b><br/>
-          地址：${s.addr}<br/>
-          可借：${s.borrow}　可還：${s.ret}<br/>
-          總格：${s.total}　見車率：${(availRate(s)*100).toFixed(0)}%
-        `);
-        markers.push(m);
-      });
-
-      document.getElementById("count").textContent = `筆數：${markers.length}`;
-    }
-
-    // ===== 資料載入（分頁 + 只保留最新） =====
-    async function load(){
-      try{
-        if (_controller) _controller.abort();
-        _controller = new AbortController();
-
-        const urls = [
-          `${API_BASE}?page=0&size=1000`,
-          `${API_BASE}?page=1&size=1000`,
-        ];
-        const pages = await Promise.all(
-          urls.map(u =>
-            fetch(u, { cache:"no-store", signal:_controller.signal })
-              .then(r => r.json())
-              .catch(() => [])
-          )
-        );
-        const raw = pages.flat();
-
-        stations = raw
-          .filter(x => x.sarea === TARGET_DIST)
-          .map(x => ({
-            name: x.sna,
-            addr: x.ar || "",
-            lat:  +x.lat,
-            lng:  +x.lng,
-            total:  +x.tot_quantity,   // 總停車格
-            borrow: +x.sbi_quantity,   // 可借
-            ret:    +x.bemp,           // 可還
-            act: String(x.act ?? "1")  // 1=營運
-          }));
-
-        const hint = document.getElementById("hint");
-        if (!stations.length){
-          hint.style.display = "block";
-          document.getElementById("count").textContent = `筆數：0`;
-        } else {
-          hint.style.display = "none";
-          console.info(`Loaded stations: ${stations.length}`);
-        }
-
-        document.getElementById("last").textContent = "最後更新：" + new Date().toLocaleString();
-        render();
-      }catch(err){
-        if (err.name !== 'AbortError'){
-          console.error("Load failed:", err);
-          document.getElementById("hint").style.display = "block";
-        }
-      }
-    }
-
-    // ===== 定時器 =====
-    const intervalSel = document.getElementById("interval");
-    function resetTimer(){
-      if (window._timer) clearInterval(window._timer);
-      const sec = Number(intervalSel.value || "30");
-      if (sec > 0) window._timer = setInterval(load, sec*1000);
-    }
-
-    // 初始載入 + 事件綁定
-    load().then(resetTimer);
-    document.getElementById("kw").addEventListener("input", debounce(render, 120));
-    document.getElementById("status").addEventListener("change", render);
-    document.getElementById("only90").addEventListener("change", render);
-    intervalSel.addEventListener("change", resetTimer);
-    document.getElementById("refresh").addEventListener("click", load);
-  </script>
-</body>
-</html>
