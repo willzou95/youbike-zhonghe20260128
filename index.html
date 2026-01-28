@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>新北 YouBike 2.0｜中和區即時站點地圖</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root{
+      --yb-yellow: #F2A118;
+      --yb-white: #FFFFFF;
+      --yb-orange: #FF7A00;
+
+      --status-green: #2DBE60;
+      --status-yellow: #F2A31B;
+      --status-red: #E64545;
+
+      --bg: #050b1e;
+      --panel: rgba(255,255,255,0.06);
+      --panel-border: rgba(255,255,255,0.15);
+      --text: #fff;
+      --muted: rgba(255,255,255,.7);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    header{padding:16px 20px;background:radial-gradient(1200px 300px at 20% -50%, #1b2a4a, var(--bg))}
+    h1{margin:0 0 10px;font-size:20px}
+    .toolbar{
+      display:grid;
+      grid-template-columns:1.4fr 1fr 1fr 1fr auto;
+      gap:10px;
+      align-items:center;
+    }
+    .toolbar input,.toolbar select,.toolbar button,.toolbar label{
+      background:var(--panel);
+      color:var(--text);
+      border:1px solid var(--panel-border);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:14px;
+    }
+    .toolbar input::placeholder{color:rgba(255,255,255,.6)}
+    .toolbar button{
+      background:linear-gradient(180deg, #ffd571, var(--yb-yellow));
+      color:#000;
+      border:none;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .meta{margin-top:8px;color:var(--muted);font-size:13px;display:flex;gap:16px;align-items:center}
+    #map{height:calc(100vh - 160px);width:100%}
+
+    .leaflet-div-icon{background:transparent;border:none}
+    .marker svg{width:56px;height:56px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.35))}
+    .marker.green{--fill: var(--status-green); --stroke:#1E7F42}
+    .marker.yellow{--fill: var(--status-yellow); --stroke:#B87400}
+    .marker.red{--fill: var(--status-red); --stroke:#8F1F1F}
+
+    .marker.highlight svg circle.outer-ring{
+      stroke: var(--yb-yellow);
+      stroke-width: 6;
+      fill: none;
+    }
+
+    .legend{
+      position:absolute;right:12px;bottom:12px;
+      background:var(--panel);border:1px solid var(--panel-border);
+      border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.6
+    }
+    .legend .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+    .dot.green{background:var(--status-green)}
+    .dot.yellow{background:var(--status-yellow)}
+    .dot.red{background:var(--status-red)}
+    .legend .ring{
+      display:inline-block;width:10px;height:10px;border-radius:50%;
+      border:3px solid var(--yb-yellow);margin-right:6px;vertical-align:middle
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>新北 YouBike 2.0｜中和區即時站點地圖</h1>
+    <div class="toolbar">
+      <input id="kw" placeholder="搜尋站名 / 地址…" />
+      <select id="status">
+        <option value="all">全部狀態</option>
+        <option value="green">正常（有車有位）</option>
+        <option value="yellow">無車</option>
+        <option value="red">滿位</option>
+      </select>
+      <select id="interval">
+        <option value="60">每 60 秒更新</option>
+        <option value="30">每 30 秒更新</option>
+        <option value="0">停止自動更新</option>
+      </select>
+      <label style="display:flex;gap:8px;align-items:center;">
+        <input id="only90" type="checkbox" />
+        只看見車率 ≥ 90%
+      </label>
+      <button id="refresh">立即更新</button>
+    </div>
+    <div class="meta">
+      <span id="last">最後更新：--</span>
+      <span id="count">筆數：--</span>
+      <span>資料源：新北市開放資料（YouBike2.0 即時）</span>
+    </div>
+  </header>
+
+  <div id="map"></div>
+
+  <div class="legend">
+    <div><span class="dot green"></span>正常（可借/可還皆 > 0）</div>
+    <div><span class="dot yellow"></span>無車（可借 = 0）</div>
+    <div><span class="dot red"></span>滿位（可還 = 0）</div>
+    <div style="margin-top:6px"><span class="ring"></span>見車率 ≥ 90%（可借 ÷ 總格）</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const API = "https://data.ntpc.gov.tw/api/datasets/010e5b15-3823-4b20-b401-b1cf000550c5/json?page=0&size=2000";
+    const TARGET_DIST = "中和區";
+
+    const map = L.map("map").setView([24.999, 121.494], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
+
+    let markers = [];
+    let stations = [];
+
+    function statusOf(s) {
+      if (s.ret === 0) return "red";
+      if (s.borrow === 0) return "yellow";
+      return "green";
+    }
+    function availRate(s) {
+      return s.total > 0 ? (s.borrow / s.total) : 0;
+    }
+    function clearMarkers() {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+    }
+    function markerHTML(s) {
+      const st = statusOf(s);
+      const hi = availRate(s) >= 0.9;
+      return `
+        <div class="marker ${st} ${hi ? "highlight" : ""}">
+          <svg viewBox="0 0 64 64">
+            ${hi ? `<circle class="outer-ring" cx="32" cy="32" r="30"/>` : ""}
+            <circle cx="32" cy="32" r="26" fill="var(--fill)" stroke="var(--stroke)" stroke-width="4"/>
+            <line x1="18" y1="32" x2="46" y2="32" stroke="#000" stroke-width="2"/>
+            <text x="32" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#000">${s.borrow}</text>
+            <text x="32" y="49" text-anchor="middle" font-size="16" font-weight="700" fill="#000">${s.ret}</text>
+          </svg>
+        </div>`;
+    }
+
+    function render(){
+      clearMarkers();
+      const kw = document.getElementById("kw").value.trim();
+      const stF = document.getElementById("status").value;
+      const only90 = document.getElementById("only90").checked;
+
+      stations
+        .filter(s => {
+          if (stF !== "all" && statusOf(s) !== stF) return false;
+          if (only90 && !(availRate(s) >= 0.9)) return false;
+          if (kw && !s.name.includes(kw) && !s.addr.includes(kw)) return false;
+          return true;
+        })
+        .forEach(s => {
+          const m = L.marker([s.lat, s.lng], {
+            icon: L.divIcon({
+              iconSize: [56,56],
+              iconAnchor: [28,28],
+              html: markerHTML(s)
+            })
+          }).addTo(map)
+            .bindPopup(`
+              <b>${s.name}</b><br/>
+              地址：${s.addr}<br/>
+              可借：${s.borrow}　可還：${s.ret}<br/>
+              總格：${s.total}　見車率：${(availRate(s)*100).toFixed(0)}%
+            `);
+          markers.push(m);
+        });
+
+      document.getElementById("count").textContent = `筆數：${markers.length}`;
+    }
+
+    async function load(){
+      const r = await fetch(API);
+      const raw = await r.json();
+
+      stations = raw
+        .filter(x => (x.sarea === TARGET_DIST))
+        .map(x => ({
+          name: x.sna,
+          addr: x.ar || "",
+          lat: +x.lat,
+          lng: +x.lng,
+          total: +x.tot_quantity,
+          borrow: +x.sbi_quantity,
+          ret: +x.bemp,
+          act: String(x.act || "1")
+        }));
+
+      document.getElementById("last").textContent = "最後更新：" + new Date().toLocaleString();
+      render();
+    }
+
+    load();
+    let timer = setInterval(load, 60000);
+
+    document.getElementById("kw").addEventListener("input", render);
+    document.getElementById("status").addEventListener("change", render);
+    document.getElementById("only90").addEventListener("change", render);
+    document.getElementById("interval").addEventListener("change", e => {
+      clearInterval(timer);
+      const sec = Number(e.target.value);
+      if (sec > 0) timer = setInterval(load, sec*1000);
+    });
+    document.getElementById("refresh").addEventListener("click", load);
+  </script>
+</body>
+</html>
