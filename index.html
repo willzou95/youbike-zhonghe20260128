@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://a.tile.openstreetmap.org">
   <link rel="preconnect" href="https://b.tile.openstreetmap.org">
 
-  <!-- Leaflet CSS（一定要是 <link>） -->
+  <!-- Leaflet CSS（務必是 <link> 不是純文字） -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -22,7 +22,7 @@
     :root{
       /* 官方風格（近似）：YouBike 2.0 芥末黃／象牙白；2.0E 橘 */
       --yb-yellow:#F2A118; --yb-white:#FFF8E7; --yb-orange:#FF7A00;
-      /* 狀態色語意與官方圖例一致：綠=正常、黃=無車、紅=滿位 */
+      /* 狀態語意色：綠=正常、黃=無車、紅=滿位 */
       --status-green:#2DBE60; --status-yellow:#F2A31B; --status-red:#E64545;
       /* 介面基礎色 */
       --bg:#050b1e; --panel:rgba(255,255,255,.06); --panel-bd:rgba(255,255,255,.15);
@@ -101,7 +101,7 @@
         <option value="yellow">無車</option>
         <option value="red">滿位</option>
       </select>
-      <!-- 新增：見車率篩選 -->
+      <!-- 見車率篩選（新增）：全部 / ≥90% / <90% -->
       <select id="rateFilter" title="見車率篩選">
         <option value="all" selected>見車率：全部</option>
         <option value="ge90">≥ 90%</option>
@@ -131,7 +131,7 @@
     <div style="margin-top:6px"><span class="ring"></span>見車率 ≥ 90%（可借 ÷ 總格）</div>
   </div>
 
-  <!-- ✅ 正確的 Leaflet JS 載入（一定要是 <script src=...></script>） -->
+  <!-- ✅ 正確的 Leaflet JS（務必是 <script src=...></script>，不是純文字） -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -208,3 +208,85 @@
       list.forEach(s => {
         const m = L.marker([s.lat, s.lng], {
           icon: L.divIcon({
+            iconSize:[56,56], iconAnchor:[28,28],
+            html: markerHTML(s)
+          })
+        }).addTo(map).bindPopup(`
+          <b>${s.name}</b><br/>
+          地址：${s.addr}<br/>
+          可借：${s.borrow}　可還：${s.ret}<br/>
+          總格：${s.total}　見車率：${(availRate(s)*100).toFixed(0)}%
+        `);
+        markers.push(m);
+      });
+
+      document.getElementById("count").textContent = `筆數：${markers.length}`;
+    }
+
+    // ===== 資料載入（分頁 + 只保留最新） =====
+    async function load(){
+      try{
+        if (_controller) _controller.abort();
+        _controller = new AbortController();
+
+        const urls = [
+          `${API_BASE}?page=0&size=1000`,
+          `${API_BASE}?page=1&size=1000`,
+        ];
+        const pages = await Promise.all(
+          urls.map(u =>
+            fetch(u, { cache:"no-store", signal:_controller.signal })
+              .then(r => r.json())
+              .catch(() => [])
+          )
+        );
+        const raw = pages.flat();
+
+        stations = raw
+          .filter(x => x.sarea === TARGET_DIST)
+          .map(x => ({
+            name: x.sna, addr: x.ar || "",
+            lat:+x.lat,  lng:+x.lng,
+            total:+x.tot_quantity,  // 總停車格
+            borrow:+x.sbi_quantity, // 可借
+            ret:+x.bemp,            // 可還
+            act: String(x.act ?? "1")
+          }));
+
+        const hint = document.getElementById("hint");
+        if (!stations.length){
+          hint.style.display = "block";
+          document.getElementById("count").textContent = `筆數：0`;
+        } else {
+          hint.style.display = "none";
+          console.info(`Loaded stations: ${stations.length}`);
+        }
+
+        document.getElementById("last").textContent = "最後更新：" + new Date().toLocaleString();
+        render();
+      }catch(err){
+        if (err.name !== 'AbortError'){
+          console.error("Load failed:", err);
+          document.getElementById("hint").style.display = "block";
+        }
+      }
+    }
+
+    // ===== 定時器與事件 =====
+    const intervalSel = document.getElementById("interval");
+    function resetTimer(){
+      if (window._timer) clearInterval(window._timer);
+      const sec = Number(intervalSel.value || "30");
+      if (sec > 0) window._timer = setInterval(load, sec*1000);
+    }
+
+    load().then(resetTimer);
+
+    document.getElementById("kw").addEventListener("input", debounce(render, 120));
+    document.getElementById("status").addEventListener("change", render);
+    document.getElementById("rateFilter").addEventListener("change", render);
+    intervalSel.addEventListener("change", resetTimer);
+    document.getElementById("refresh").addEventListener("click", load);
+  </script>
+</body>
+</html>
