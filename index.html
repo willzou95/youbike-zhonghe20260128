@@ -4,14 +4,22 @@
   <meta charset="UTF-8" />
   <title>新北 YouBike 2.0｜中和區即時站點地圖</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Leaflet（地圖套件） -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
   <style>
     :root{
+      /* YouBike 2.0 近似品牌色（芥末黃／白），2.0E 橘 */
       --yb-yellow: #F2A118;
       --yb-white: #FFFFFF;
       --yb-orange: #FF7A00;
 
+      /* 官方站點圖例語意色（近似）：正常/無車/滿位 */
       --status-green: #2DBE60;
       --status-yellow: #F2A31B;
       --status-red: #E64545;
@@ -51,18 +59,21 @@
     .meta{margin-top:8px;color:var(--muted);font-size:13px;display:flex;gap:16px;align-items:center}
     #map{height:calc(100vh - 160px);width:100%}
 
+    /* 自訂圓形雙數字 marker（上=可借、下=可還） */
     .leaflet-div-icon{background:transparent;border:none}
     .marker svg{width:56px;height:56px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.35))}
     .marker.green{--fill: var(--status-green); --stroke:#1E7F42}
     .marker.yellow{--fill: var(--status-yellow); --stroke:#B87400}
     .marker.red{--fill: var(--status-red); --stroke:#8F1F1F}
 
+    /* 見車率 >= 90% 的高亮外圈（YouBike 芥末黃） */
     .marker.highlight svg circle.outer-ring{
       stroke: var(--yb-yellow);
       stroke-width: 6;
       fill: none;
     }
 
+    /* 右下角圖例 */
     .legend{
       position:absolute;right:12px;bottom:12px;
       background:var(--panel);border:1px solid var(--panel-border);
@@ -90,12 +101,12 @@
         <option value="red">滿位</option>
       </select>
       <select id="interval">
+        <option value="30" selected>每 30 秒更新</option>
         <option value="60">每 60 秒更新</option>
-        <option value="30">每 30 秒更新</option>
         <option value="0">停止自動更新</option>
       </select>
       <label style="display:flex;gap:8px;align-items:center;">
-        <input id="only90" type="checkbox" />
+        <input id="only90" type="checkbox" checked />
         只看見車率 ≥ 90%
       </label>
       <button id="refresh">立即更新</button>
@@ -116,12 +127,21 @@
     <div style="margin-top:6px"><span class="ring"></span>見車率 ≥ 90%（可借 ÷ 總格）</div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
   <script>
+    // 新北 YouBike 2.0 即時資料（OpenData）
+    // 只顯示「中和區」
     const API = "https://data.ntpc.gov.tw/api/datasets/010e5b15-3823-4b20-b401-b1cf000550c5/json?page=0&size=2000";
     const TARGET_DIST = "中和區";
 
-    const map = L.map("map").setView([24.999, 121.494], 13);
+    // 地圖：置中「中和熱區（ZW1/ZW2 附近）」；可依實務微調
+    const map = L.map("map").setView([24.999, 121.496], 14);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap contributors"
     }).addTo(map);
@@ -130,12 +150,12 @@
     let stations = [];
 
     function statusOf(s) {
-      if (s.ret === 0) return "red";
-      if (s.borrow === 0) return "yellow";
-      return "green";
+      if (s.ret === 0) return "red";      // 滿位
+      if (s.borrow === 0) return "yellow";// 無車
+      return "green";                     // 正常
     }
     function availRate(s) {
-      return s.total > 0 ? (s.borrow / s.total) : 0;
+      return s.total > 0 ? (s.borrow / s.total) : 0; // 見車率（可借/總格）
     }
     function clearMarkers() {
       markers.forEach(m => map.removeLayer(m));
@@ -143,7 +163,7 @@
     }
     function markerHTML(s) {
       const st = statusOf(s);
-      const hi = availRate(s) >= 0.9;
+      const hi = availRate(s) >= 0.9; // 見車率門檻
       return `
         <div class="marker ${st} ${hi ? "highlight" : ""}">
           <svg viewBox="0 0 64 64">
@@ -193,6 +213,7 @@
       const r = await fetch(API);
       const raw = await r.json();
 
+      // 只留中和區，並統一欄位名稱
       stations = raw
         .filter(x => (x.sarea === TARGET_DIST))
         .map(x => ({
@@ -200,27 +221,30 @@
           addr: x.ar || "",
           lat: +x.lat,
           lng: +x.lng,
-          total: +x.tot_quantity,
-          borrow: +x.sbi_quantity,
-          ret: +x.bemp,
-          act: String(x.act || "1")
+          total: +x.tot_quantity,   // 總停車格
+          borrow: +x.sbi_quantity,  // 可借
+          ret: +x.bemp,             // 可還
+          act: String(x.act || "1") // 1=營運
         }));
 
       document.getElementById("last").textContent = "最後更新：" + new Date().toLocaleString();
       render();
     }
 
-    load();
-    let timer = setInterval(load, 60000);
+    // 初始化：預設更新頻率依下拉選單的值
+    const intervalSel = document.getElementById("interval");
+    function resetTimer(){
+      if (window._timer) clearInterval(window._timer);
+      const sec = Number(intervalSel.value || "30");
+      if (sec > 0) window._timer = setInterval(load, sec*1000);
+    }
+
+    load().then(resetTimer);
 
     document.getElementById("kw").addEventListener("input", render);
     document.getElementById("status").addEventListener("change", render);
     document.getElementById("only90").addEventListener("change", render);
-    document.getElementById("interval").addEventListener("change", e => {
-      clearInterval(timer);
-      const sec = Number(e.target.value);
-      if (sec > 0) timer = setInterval(load, sec*1000);
-    });
+    intervalSel.addEventListener("change", resetTimer);
     document.getElementById("refresh").addEventListener("click", load);
   </script>
 </body>
